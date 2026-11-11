@@ -339,6 +339,7 @@ const el = (tag, cls, text) => {
 };
 
 let ws = null, myId = null, room = null;
+let token = null, me = null, retries = 0, finalStats = null;
 let house = localStorage.getItem('kw_house') || 'ember';
 let wordCount = 30;
 
@@ -380,19 +381,37 @@ function enter(code) {
   if (!name) { toast('Every wizard needs a name.'); $('#name').focus(); return; }
   if (code !== null && code.length !== 4) { toast('Chamber codes are 4 letters.'); $('#code').focus(); return; }
   localStorage.setItem('kw_name', name);
-  if (ws) ws.close();
-  const sock = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  me = { name, house };
+  room = null; myId = null; token = null; retries = 0;
+  if (ws) { const old = ws; ws = null; old.close(); }
+  openSocket({ t: 'join', name, house, code: code || undefined });
+}
+
+function goHome(msg) {
+  room = null; myId = null; token = null;
+  show('home');
+  if (msg) toast(msg);
+}
+
+function openSocket(joinMsg) {
+  const sock = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/ws');
   ws = sock;
-  sock.onopen = () => send({ t: 'join', name, house, code: code || undefined });
+  sock.onopen = () => sock.send(JSON.stringify(joinMsg));
   sock.onmessage = (e) => handle(JSON.parse(e.data));
   sock.onclose = () => {
     if (ws !== sock) return;
     ws = null;
-    if (room) toast('The connection to the chamber was lost.');
-    room = null; myId = null;
-    show('home');
+    if (!room) return goHome('Could not reach the Keywars server.');
+    if (retries >= 6) return goHome('The connection to the chamber was lost.');
+    // Dropped mid-session (hosts may recycle connections): rejoin the same seat.
+    retries++;
+    if (retries > 1) toast('Reconnecting to the chamber…');
+    setTimeout(() => {
+      if (!ws && room) openSocket({ t: 'join', name: me.name, house: me.house, code: room.code, token });
+    }, retries === 1 ? 50 : 400 * retries);
   };
 }
+setInterval(() => send({ t: 'ping' }), 25000); // keep idle connections alive
 const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
 
 $('#create').onclick = () => enter(null);
@@ -404,15 +423,24 @@ $('#name').onkeydown = (e) => e.key === 'Enter' && ($('#code').value ? $('#join'
 function handle(m) {
   if (m.t === 'joined') {
     myId = m.id;
+    token = m.token;
     history.replaceState(null, '', '?room=' + m.code);
   } else if (m.t === 'state') {
     room = m.room;
+    retries = 0;
+    // a finish sent while the connection was down never arrived: send it again
+    if (done && iAmRacing && finalStats && room.state === 'racing') {
+      const p = room.players.find((x) => x.id === myId);
+      if (p && !p.finished) send({ t: 'finish', ...finalStats });
+    }
     render();
   } else if (m.t === 'start') {
+    // after a reconnect keep what has already been typed
+    if (m.resumed && words.length && words.join(' ') === m.words.join(' ')) return;
     setupRace(m);
   } else if (m.t === 'error') {
-    toast(m.msg);
     const s = ws; ws = null; s.close();
+    goHome(m.msg);
   }
 }
 
@@ -426,7 +454,7 @@ function render() {
     for (const p of room.players) {
       const li = el('li');
       li.style.setProperty('--hc', HOUSES[p.house].color);
-      li.append(el('span', '', HOUSES[p.house].icon), el('span', '', p.name + (p.id === myId ? ' (you)' : '')));
+      li.append(el('span', '', HOUSES[p.house].icon), el('span', '', p.name + (p.id === myId ? ' (you)' : p.away ? ' (reconnecting…)' : '')));
       if (p.id === room.hostId) li.append(el('span', 'badge', 'HOST'));
       ul.append(li);
     }
@@ -461,7 +489,7 @@ $('#copy').onclick = async () => {
 function setupRace(m) {
   words = m.words;
   typed = words.map(() => '');
-  wi = 0; tot = 0; cor = 0; done = false; endT = 0; lastCount = '';
+  wi = 0; tot = 0; cor = 0; done = false; endT = 0; lastCount = ''; finalStats = null;
   iAmRacing = m.racing;
   startT = performance.now() + m.in;
   const box = $('#words');
@@ -540,6 +568,7 @@ function finish() {
   wi = words.length;
   clearTimeout(sendTimer);
   const s = myStats();
+  finalStats = s;
   send({ t: 'finish', ...s });
   $('#sWpm').textContent = s.wpm;
   $('#sAcc').textContent = s.acc;

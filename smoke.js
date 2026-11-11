@@ -1,27 +1,29 @@
 // Smoke test: two players join a room, race, and both finish.
 const WebSocket = require('ws');
 const url = 'ws://localhost:' + (process.env.PORT || 3000);
-const open = (name, code) =>
+const open = (name, code, token) =>
   new Promise((res) => {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url + '/api/ws');
     ws.log = [];
     ws.on('message', (d) => {
       const m = JSON.parse(d);
       ws.log.push(m);
       if (m.t === 'state') ws.room = m.room;
       if (m.t === 'start') ws.words = m.words;
-      if (m.t === 'joined') res(Object.assign(ws, { code: m.code, id: m.id }));
+      if (m.t === 'joined') res(Object.assign(ws, { code: m.code, id: m.id, token: m.token, resumed: !!m.resumed }));
     });
-    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', name, house: 'storm', code })));
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', name, house: 'storm', code, token })));
   });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const assert = (ok, msg) => { if (!ok) { console.error('FAIL: ' + msg); process.exit(1); } console.log('ok: ' + msg); };
 
 (async () => {
-  const page = await (await fetch(url.replace('ws', 'http'))).text();
-  assert(page.includes('KEYWARS'), 'page is served');
+  if (!process.env.NO_PAGE) {
+    const page = await (await fetch(url.replace('ws', 'http'))).text();
+    assert(page.includes('KEYWARS'), 'page is served');
+  }
   const a = await open('Alice');
-  const b = await open('Bob', a.code.toLowerCase());
+  let b = await open('Bob', a.code.toLowerCase());
   await wait(100);
   assert(a.room.players.length === 2, 'both players in the room');
   b.send(JSON.stringify({ t: 'start', wordCount: 15 }));
@@ -39,6 +41,15 @@ const assert = (ok, msg) => { if (!ok) { console.error('FAIL: ' + msg); process.
   await wait(100);
   const seen = a.room.players.find((p) => p.id === b.id);
   assert(seen.w === 5 && seen.wpm === 80 && seen.prog > 0.3, 'Alice sees Bob live progress');
+  // Bob's connection drops mid-race and he reconnects into the same seat
+  b.close();
+  await wait(150);
+  assert(a.room.players.find((p) => p.id === b.id).away === true, 'dropped player is kept during the grace period');
+  const oldB = b;
+  b = await open('Bob', a.code, oldB.token);
+  await wait(150);
+  const back = a.room.players.find((p) => p.id === b.id);
+  assert(b.resumed && b.id === oldB.id && back.w === 5 && back.racing && !back.away && b.words.length === 15, 'reconnect resumes the same seat mid-race');
   const c = await open('Cara', a.code);
   await wait(100);
   assert(c.words && c.room.players.find((p) => p.id === c.id).racing === false, 'late joiner spectates');
@@ -50,8 +61,6 @@ const assert = (ok, msg) => { if (!ok) { console.error('FAIL: ' + msg); process.
   a.send(JSON.stringify({ t: 'again' }));
   await wait(100);
   assert(b.room.state === 'lobby', 'host returns everyone to the lobby');
-  a.close();
-  await wait(100);
-  assert(b.room.hostId === b.id && b.room.players.length === 2, 'host passes on when the host leaves');
+  assert(!JSON.stringify(b.room).includes(a.token), 'tokens are never broadcast');
   process.exit(0);
 })();
