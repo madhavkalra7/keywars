@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keywars — The Wizarding Typing Duel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #090b18;
+    --panel: rgba(20, 22, 44, .78);
+    --line: rgba(212, 175, 55, .28);
+    --gold: #d9b64a;
+    --gold-soft: #f3dc93;
+    --parch: #eadfc4;
+    --muted: #6d6c86;
+    --bad: #e2574c;
+    --ember: #e0564a;
+    --storm: #5b9bf0;
+    --briar: #4fbf7c;
+    --honey: #efc13f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--parch);
+    font-family: 'IM Fell English', Georgia, serif;
+    font-size: 18px;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(88, 70, 160, .35), transparent 70%),
+      radial-gradient(900px 500px at 50% 115%, rgba(212, 175, 55, .10), transparent 70%),
+      var(--bg);
+    overflow-x: hidden;
+  }
+  /* starry sky */
+  body::before, body::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(1.5px 1.5px at 8% 14%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 22% 62%, #fff, transparent 60%),
+      radial-gradient(1.5px 1.5px at 37% 28%, #ffe9a8, transparent 60%),
+      radial-gradient(1px 1px at 51% 78%, #fff, transparent 60%),
+      radial-gradient(1.5px 1.5px at 64% 18%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 78% 52%, #ffe9a8, transparent 60%),
+      radial-gradient(1.5px 1.5px at 91% 30%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 95% 84%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 14% 88%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 45% 8%, #fff, transparent 60%);
+    opacity: .7;
+    animation: twinkle 5s ease-in-out infinite alternate;
+  }
+  body::after { transform: scale(-1, 1) translateY(40px); animation-delay: -2.5s; opacity: .45; }
+  @keyframes twinkle { from { opacity: .25; } to { opacity: .8; } }
+
+  /* floating candles */
+  .candles { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+  .candle {
+    position: absolute; top: var(--y); left: var(--x);
+    width: 7px; height: 34px; border-radius: 2px;
+    background: linear-gradient(#f6ecd0, #b9a67a);
+    animation: bob var(--d, 6s) ease-in-out infinite alternate;
+    opacity: .8;
+  }
+  .candle::before {
+    content: ''; position: absolute; left: 50%; top: -15px;
+    width: 9px; height: 15px; margin-left: -4.5px;
+    border-radius: 50% 50% 50% 50% / 65% 65% 35% 35%;
+    background: radial-gradient(circle at 50% 75%, #fff6c9, #ffb52e 55%, transparent 75%);
+    box-shadow: 0 0 22px 9px rgba(255, 180, 60, .32);
+    animation: flicker .22s ease-in-out infinite alternate;
+  }
+  @keyframes bob { from { transform: translateY(-10px); } to { transform: translateY(12px); } }
+  @keyframes flicker { from { transform: scale(1) rotate(-2deg); } to { transform: scale(1.1, .94) rotate(2deg); } }
+
+  main { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { text-align: center; margin-bottom: 26px; }
+  h1 {
+    font-family: 'Cinzel', serif; font-weight: 900; letter-spacing: .14em;
+    font-size: clamp(2.2rem, 6vw, 3.6rem); margin: 0;
+    background: linear-gradient(180deg, #fff3c4, var(--gold) 55%, #8f6f1c);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 18px rgba(217, 182, 74, .35));
+  }
+  .tag { font-style: italic; color: var(--muted); margin-top: 2px; }
+  h2 { font-family: 'Cinzel', serif; color: var(--gold-soft); letter-spacing: .08em; font-size: 1.15rem; margin: 0 0 14px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .45), inset 0 0 40px rgba(212, 175, 55, .04);
+    backdrop-filter: blur(6px);
+  }
+  .view { display: none; }
+  .view.on { display: block; animation: fade .3s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  label { display: block; font-family: 'Cinzel', serif; font-size: .78rem; letter-spacing: .12em; color: var(--gold); margin: 16px 0 6px; }
+  input[type=text] {
+    width: 100%; padding: 12px 14px; font: inherit; color: var(--parch);
+    background: rgba(0, 0, 0, .35); border: 1px solid var(--line); border-radius: 8px; outline: none;
+  }
+  input[type=text]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(217, 182, 74, .15); }
+  button {
+    font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: .08em; font-size: .95rem;
+    padding: 12px 20px; border-radius: 8px; cursor: pointer;
+    color: #1b1505; border: 1px solid #8f6f1c;
+    background: linear-gradient(180deg, #f6df95, var(--gold));
+    transition: transform .1s, filter .15s;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:active { transform: translateY(1px); }
+  button.ghost { background: transparent; color: var(--gold-soft); border-color: var(--line); }
+  button.ghost.sel { background: rgba(217, 182, 74, .18); border-color: var(--gold); }
+
+  .home { max-width: 520px; margin: 0 auto; }
+  .houses { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .house {
+    padding: 10px 4px; text-align: center; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: rgba(0, 0, 0, .3);
+    font-family: 'Cinzel', serif; font-size: .7rem; letter-spacing: .04em; color: var(--parch);
+  }
+  .house span { display: block; font-size: 1.5rem; margin-bottom: 2px; }
+  .house.sel { border-color: var(--hc); box-shadow: 0 0 0 2px var(--hc), 0 0 18px -4px var(--hc); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > input { flex: 1; min-width: 120px; text-transform: uppercase; letter-spacing: .3em; text-align: center; }
+  .or { text-align: center; color: var(--muted); font-style: italic; margin: 16px 0 4px; }
+  .wide { width: 100%; margin-top: 22px; }
+
+  .code {
+    font-family: 'Cinzel', serif; font-weight: 900; font-size: 2rem; letter-spacing: .3em; color: var(--gold-soft);
+  }
+  .players { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; }
+  .players li {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border: 1px solid var(--line); border-left: 4px solid var(--hc); border-radius: 8px; background: rgba(0, 0, 0, .25);
+  }
+  .players .badge { margin-left: auto; font-family: 'Cinzel', serif; font-size: .7rem; letter-spacing: .1em; color: var(--gold); }
+  .hint { color: var(--muted); font-style: italic; }
+
+  /* race */
+  .stats { display: flex; gap: 28px; justify-content: center; margin-bottom: 14px; font-family: 'Cinzel', serif; }
+  .stat { text-align: center; }
+  .stat b { display: block; font-size: 2rem; color: var(--gold-soft); line-height: 1.1; }
+  .stat small { font-size: .7rem; letter-spacing: .14em; color: var(--muted); }
+
+  .track { display: grid; gap: 8px; margin-bottom: 20px; }
+  .lane { display: grid; grid-template-columns: 130px 1fr 92px; gap: 12px; align-items: center; }
+  .lane .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--hc); }
+  .lane.me .nm { font-weight: bold; text-decoration: underline; text-underline-offset: 4px; }
+  .lane .bar { position: relative; height: 26px; border-bottom: 1px dashed rgba(234, 223, 196, .22); }
+  .lane .fill {
+    position: absolute; left: 0; bottom: -1px; height: 2px; width: 0;
+    background: var(--hc); box-shadow: 0 0 10px var(--hc); transition: width .15s linear;
+  }
+  .lane .broom {
+    position: absolute; left: 0; bottom: -4px; font-size: 1.25rem; line-height: 1;
+    transform: translateX(-50%) scaleX(-1); transition: left .15s linear;
+    filter: drop-shadow(0 0 6px var(--hc));
+  }
+  .lane .sp { font-family: 'JetBrains Mono', monospace; font-size: .85rem; text-align: right; color: var(--parch); }
+
+  .words-wrap { position: relative; }
+  #words {
+    position: relative;
+    display: flex; flex-wrap: wrap; align-content: flex-start;
+    font-family: 'JetBrains Mono', Consolas, monospace; font-size: 1.55rem; line-height: 1.7;
+    color: var(--muted); user-select: none;
+    padding: 18px 20px; border-radius: 10px;
+    background: rgba(0, 0, 0, .28); border: 1px solid rgba(212, 175, 55, .14);
+  }
+  .word { margin: 0 .32em; border-bottom: 2px solid transparent; }
+  .word.err { border-bottom-color: var(--bad); }
+  .word i { font-style: normal; }
+  .word i.ok { color: var(--parch); text-shadow: 0 0 10px rgba(243, 220, 147, .35); }
+  .word i.bad { color: var(--bad); }
+  .word i.extra { color: #9c3b34; }
+  .caret {
+    position: absolute; width: 2.5px; border-radius: 2px; left: 0; top: 0;
+    background: var(--gold-soft); box-shadow: 0 0 10px var(--gold);
+    transition: left .08s ease-out, top .08s ease-out; pointer-events: none;
+  }
+  #caret { animation: blink 1s steps(2) infinite; }
+  #caret.typing { animation: none; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .ghost-caret { background: var(--hc); box-shadow: 0 0 8px var(--hc); opacity: .85; transition: left .15s linear, top .15s linear; }
+  .ghost-caret span {
+    position: absolute; bottom: 100%; left: -2px; white-space: nowrap;
+    font: 500 .62rem 'JetBrains Mono', monospace; padding: 1px 5px; border-radius: 4px 4px 4px 0;
+    background: var(--hc); color: #10101c;
+  }
+  .overlay {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    border-radius: 10px; background: rgba(9, 11, 24, .72); text-align: center;
+    font-family: 'Cinzel', serif; color: var(--gold-soft);
+  }
+  .overlay.on { display: flex; }
+  #count { font-size: 5rem; font-weight: 900; text-shadow: 0 0 40px var(--gold); }
+  #count.pop { animation: pop .5s ease; }
+  @keyframes pop { from { transform: scale(1.6); opacity: .3; } to { transform: none; opacity: 1; } }
+  .raceinfo { text-align: center; margin-top: 14px; min-height: 1.5em; }
+
+  /* results */
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; }
+  th { font-family: 'Cinzel', serif; font-size: .72rem; letter-spacing: .14em; color: var(--muted); text-align: left; padding: 8px 10px; }
+  td { padding: 12px 10px; border-top: 1px solid rgba(212, 175, 55, .14); }
+  td.n { font-family: 'JetBrains Mono', monospace; }
+  tr.me td { background: rgba(217, 182, 74, .08); }
+  tr.first td { font-size: 1.2rem; color: var(--gold-soft); }
+  .center { text-align: center; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+    background: #2a1414; border: 1px solid var(--bad); color: #ffd9d4; padding: 10px 18px; border-radius: 8px;
+    opacity: 0; transition: .25s; z-index: 10; pointer-events: none;
+  }
+  #toast.on { opacity: 1; transform: translateX(-50%); }
+  #toast.good { background: #14221a; border-color: var(--briar); color: #d6f5e2; }
+
+  @media (max-width: 640px) {
+    #words { font-size: 1.15rem; padding: 14px; }
+    .lane { grid-template-columns: 84px 1fr 70px; }
+    .houses { grid-template-columns: repeat(2, 1fr); }
+    .panel { padding: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="candles">
+  <div class="candle" style="--x:6%;--y:16%;--d:5s"></div>
+  <div class="candle" style="--x:15%;--y:58%;--d:7s"></div>
+  <div class="candle" style="--x:27%;--y:9%;--d:6s"></div>
+  <div class="candle" style="--x:74%;--y:11%;--d:6.5s"></div>
+  <div class="candle" style="--x:87%;--y:48%;--d:5.5s"></div>
+  <div class="candle" style="--x:94%;--y:20%;--d:7.5s"></div>
+</div>
+
+<main>
+  <header>
+    <h1>KEYWARS</h1>
+    <div class="tag">Quills at the ready — the swiftest spellcaster wins</div>
+  </header>
+
+  <!-- HOME -->
+  <section id="home" class="view on">
+    <div class="panel home">
+      <label for="name">YOUR WIZARDING NAME</label>
+      <input id="name" type="text" maxlength="16" placeholder="e.g. Morgana" autocomplete="off">
+
+      <label>CHOOSE YOUR HOUSE</label>
+      <div class="houses" id="houses"></div>
+
+      <button id="create" class="wide">✦ Open a New Chamber</button>
+      <div class="or">— or join your friends —</div>
+      <div class="row">
+        <input id="code" type="text" maxlength="4" placeholder="CODE" autocomplete="off">
+        <button id="join" class="ghost">Enter Chamber</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" class="view">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <h2 style="margin:0">CHAMBER CODE</h2>
+          <div class="code" id="roomCode"></div>
+        </div>
+        <button id="copy" class="ghost">Copy Invite Link</button>
+      </div>
+      <ul class="players" id="lobbyPlayers"></ul>
+      <div id="hostControls">
+        <label>LENGTH OF THE DUEL</label>
+        <div class="row" id="lengths">
+          <button class="ghost" data-n="15">15 words</button>
+          <button class="ghost sel" data-n="30">30 words</button>
+          <button class="ghost" data-n="50">50 words</button>
+        </div>
+        <button id="start" class="wide">⚡ Begin the Duel</button>
+      </div>
+      <p id="waitHost" class="hint center">Waiting for the chamber's host to begin the duel…</p>
+    </div>
+  </section>
+
+  <!-- RACE -->
+  <section id="race" class="view">
+    <div class="panel">
+      <div class="stats">
+        <div class="stat"><b id="sWpm">0</b><small>WPM</small></div>
+        <div class="stat"><b id="sAcc">100</b><small>ACCURACY %</small></div>
+        <div class="stat"><b id="sTime">0</b><small>SECONDS</small></div>
+      </div>
+      <div class="track" id="track"></div>
+      <div class="words-wrap">
+        <div id="words"></div>
+        <div class="overlay" id="overlay"><div id="count"></div></div>
+      </div>
+      <div class="raceinfo hint" id="raceInfo"></div>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="view">
+    <div class="panel">
+      <h2 class="center" style="font-size:1.5rem" id="winner"></h2>
+      <table>
+        <thead><tr><th>PLACE</th><th>WIZARD</th><th>WPM</th><th>ACCURACY</th></tr></thead>
+        <tbody id="resultRows"></tbody>
+      </table>
+      <div class="center">
+        <button id="again">↻ Duel Again</button>
+        <p id="waitAgain" class="hint">Waiting for the host to start another duel…</p>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const HOUSES = {
+  ember: { name: 'Emberclaw',   icon: '🔥', color: 'var(--ember)' },
+  storm: { name: 'Stormquill',  icon: '⚡', color: 'var(--storm)' },
+  briar: { name: 'Nightbriar',  icon: '🌙', color: 'var(--briar)' },
+  honey: { name: 'Honeyhollow', icon: '🍯', color: 'var(--honey)' },
+};
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+
+let ws = null, myId = null, room = null;
+let house = localStorage.getItem('kw_house') || 'ember';
+let wordCount = 30;
+
+// race state
+let words = [], typed = [], wi = 0, startT = 0, endT = 0;
+let tot = 0, cor = 0, done = false, iAmRacing = false, lastCount = '';
+let wordEls = [], lastSent = 0, sendTimer = null;
+
+/* ---------- home ---------- */
+$('#name').value = localStorage.getItem('kw_name') || '';
+$('#code').value = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 4);
+
+for (const [key, h] of Object.entries(HOUSES)) {
+  const d = el('div', 'house' + (key === house ? ' sel' : ''));
+  d.style.setProperty('--hc', h.color);
+  d.append(el('span', '', h.icon), h.name);
+  d.onclick = () => {
+    house = key;
+    localStorage.setItem('kw_house', key);
+    document.querySelectorAll('.house').forEach((x) => x.classList.toggle('sel', x === d));
+  };
+  $('#houses').append(d);
+}
+
+function toast(msg, good) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'on' + (good ? ' good' : '');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.className = ''), 2600);
+}
+
+function show(id) {
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === id));
+}
+
+function enter(code) {
+  const name = $('#name').value.trim();
+  if (!name) { toast('Every wizard needs a name.'); $('#name').focus(); return; }
+  if (code !== null && code.length !== 4) { toast('Chamber codes are 4 letters.'); $('#code').focus(); return; }
+  localStorage.setItem('kw_name', name);
+  if (ws) ws.close();
+  const sock = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws = sock;
+  sock.onopen = () => send({ t: 'join', name, house, code: code || undefined });
+  sock.onmessage = (e) => handle(JSON.parse(e.data));
+  sock.onclose = () => {
+    if (ws !== sock) return;
+    ws = null;
+    if (room) toast('The connection to the chamber was lost.');
+    room = null; myId = null;
+    show('home');
+  };
+}
+const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
+
+$('#create').onclick = () => enter(null);
+$('#join').onclick = () => enter($('#code').value.trim().toUpperCase());
+$('#code').onkeydown = (e) => e.key === 'Enter' && $('#join').click();
+$('#name').onkeydown = (e) => e.key === 'Enter' && ($('#code').value ? $('#join') : $('#create')).click();
+
+/* ---------- messages ---------- */
+function handle(m) {
+  if (m.t === 'joined') {
+    myId = m.id;
+    history.replaceState(null, '', '?room=' + m.code);
+  } else if (m.t === 'state') {
+    room = m.room;
+    render();
+  } else if (m.t === 'start') {
+    setupRace(m);
+  } else if (m.t === 'error') {
+    toast(m.msg);
+    const s = ws; ws = null; s.close();
+  }
+}
+
+function render() {
+  const isHost = room.hostId === myId;
+  if (room.state === 'lobby') {
+    show('lobby');
+    $('#roomCode').textContent = room.code;
+    const ul = $('#lobbyPlayers');
+    ul.replaceChildren();
+    for (const p of room.players) {
+      const li = el('li');
+      li.style.setProperty('--hc', HOUSES[p.house].color);
+      li.append(el('span', '', HOUSES[p.house].icon), el('span', '', p.name + (p.id === myId ? ' (you)' : '')));
+      if (p.id === room.hostId) li.append(el('span', 'badge', 'HOST'));
+      ul.append(li);
+    }
+    $('#hostControls').style.display = isHost ? '' : 'none';
+    $('#waitHost').style.display = isHost ? 'none' : '';
+  } else if (room.state === 'finished') {
+    renderResults(isHost);
+  } else {
+    show('race');
+    renderTrack();
+    renderGhosts();
+    renderInfo();
+  }
+}
+
+/* ---------- lobby ---------- */
+$('#lengths').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  wordCount = +b.dataset.n;
+  document.querySelectorAll('#lengths button').forEach((x) => x.classList.toggle('sel', x === b));
+};
+$('#start').onclick = () => send({ t: 'start', wordCount });
+$('#again').onclick = () => send({ t: 'again' });
+$('#copy').onclick = async () => {
+  const link = location.origin + '/?room=' + room.code;
+  try { await navigator.clipboard.writeText(link); toast('Invite link copied!', true); }
+  catch { prompt('Copy this invite link:', link); }
+};
+
+/* ---------- race ---------- */
+function setupRace(m) {
+  words = m.words;
+  typed = words.map(() => '');
+  wi = 0; tot = 0; cor = 0; done = false; endT = 0; lastCount = '';
+  iAmRacing = m.racing;
+  startT = performance.now() + m.in;
+  const box = $('#words');
+  box.replaceChildren();
+  wordEls = words.map((w) => {
+    const d = el('div', 'word');
+    for (const ch of w) d.append(el('i', '', ch));
+    box.append(d);
+    return d;
+  });
+  const caret = el('div', 'caret');
+  caret.id = 'caret';
+  box.append(caret);
+  caret.style.display = iAmRacing ? '' : 'none';
+  $('#track').replaceChildren();
+  $('#sWpm').textContent = '0';
+  $('#sAcc').textContent = '100';
+  $('#sTime').textContent = '0';
+  show('race');
+  if (document.activeElement) document.activeElement.blur();
+  placeCaret(caret, 0, 0);
+  if (room) render();
+}
+
+function paintWord(i) {
+  const d = wordEls[i], w = words[i], t = typed[i];
+  d.replaceChildren();
+  for (let k = 0; k < w.length; k++) {
+    d.append(el('i', k < t.length ? (t[k] === w[k] ? 'ok' : 'bad') : '', w[k]));
+  }
+  for (let k = w.length; k < t.length; k++) d.append(el('i', 'extra', t[k]));
+  d.classList.toggle('err', i < wi && t !== w);
+}
+
+function placeCaret(caret, w, c) {
+  const d = wordEls[w];
+  if (!d) { caret.style.display = 'none'; return; }
+  const letters = d.children;
+  const at = letters[Math.min(c, letters.length - 1)];
+  const x = d.offsetLeft + at.offsetLeft + (c >= letters.length ? at.offsetWidth : 0);
+  caret.style.left = x - 1 + 'px';
+  caret.style.top = d.offsetTop + at.offsetTop + at.offsetHeight * 0.14 + 'px';
+  caret.style.height = at.offsetHeight * 0.72 + 'px';
+}
+
+function myStats() {
+  let chars = 0;
+  for (let i = 0; i < wi; i++) if (typed[i] === words[i]) chars += words[i].length + 1;
+  if (wi < words.length) {
+    const w = words[wi], t = typed[wi];
+    let k = 0;
+    while (k < t.length && k < w.length && t[k] === w[k]) k++;
+    chars += k;
+  } else {
+    chars -= 1; // no trailing space after the final word
+  }
+  const mins = Math.max(((endT || performance.now()) - startT) / 60000, 1 / 600);
+  return {
+    wpm: Math.max(0, Math.round(chars / 5 / mins)),
+    acc: tot ? Math.round((cor / tot) * 100) : 100,
+  };
+}
+
+function sendProgress() {
+  clearTimeout(sendTimer);
+  const wait = 90 - (performance.now() - lastSent);
+  if (wait > 0) { sendTimer = setTimeout(sendProgress, wait); return; }
+  if (done) return;
+  lastSent = performance.now();
+  send({ t: 'progress', w: wi, c: typed[wi].length, ...myStats() });
+}
+
+function finish() {
+  done = true;
+  endT = performance.now();
+  wi = words.length;
+  clearTimeout(sendTimer);
+  const s = myStats();
+  send({ t: 'finish', ...s });
+  $('#sWpm').textContent = s.wpm;
+  $('#sAcc').textContent = s.acc;
+  $('#caret').style.display = 'none';
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!$('#race').classList.contains('on') || !iAmRacing || done) return;
+  if (performance.now() < startT || !room || room.state === 'finished') return;
+  if (e.metaKey || e.altKey || (e.ctrlKey && e.key !== 'Backspace')) return;
+  const last = words.length - 1;
+  const prev = wi;
+
+  if (e.key === ' ') {
+    e.preventDefault();
+    if (!typed[wi].length) return;
+    tot++;
+    if (typed[wi] === words[wi]) cor++;
+    if (wi === last) { wi++; paintWord(last); wi = last; finish(); return; }
+    wi++;
+  } else if (e.key === 'Backspace') {
+    e.preventDefault();
+    if (typed[wi].length) {
+      typed[wi] = e.ctrlKey ? '' : typed[wi].slice(0, -1);
+    } else if (wi > 0 && typed[wi - 1] !== words[wi - 1]) {
+      wi--;
+    }
+  } else if (e.key.length === 1) {
+    e.preventDefault();
+    if (typed[wi].length >= words[wi].length + 8) return;
+    tot++;
+    if (e.key === words[wi][typed[wi].length]) cor++;
+    typed[wi] += e.key;
+    if (wi === last && typed[wi] === words[wi]) { paintWord(wi); finish(); return; }
+  } else {
+    return;
+  }
+
+  paintWord(prev);
+  if (wi !== prev) paintWord(wi);
+  const caret = $('#caret');
+  caret.classList.add('typing');
+  clearTimeout(caret.idle);
+  caret.idle = setTimeout(() => caret.classList.remove('typing'), 600);
+  placeCaret(caret, wi, typed[wi].length);
+  renderGhosts();
+  sendProgress();
+});
+
+function renderTrack() {
+  const track = $('#track');
+  const racers = room.players.filter((p) => p.racing);
+  const seen = new Set();
+  for (const p of racers) {
+    seen.add('lane' + p.id);
+    let lane = document.getElementById('lane' + p.id);
+    if (!lane) {
+      lane = el('div', 'lane' + (p.id === myId ? ' me' : ''));
+      lane.id = 'lane' + p.id;
+      lane.style.setProperty('--hc', HOUSES[p.house].color);
+      const bar = el('div', 'bar');
+      bar.append(el('div', 'fill'), el('div', 'broom', '🧹'));
+      lane.append(el('div', 'nm', HOUSES[p.house].icon + ' ' + p.name), bar, el('div', 'sp'));
+      track.append(lane);
+    }
+    const pct = Math.round(p.prog * 1000) / 10 + '%';
+    lane.querySelector('.fill').style.width = pct;
+    lane.querySelector('.broom').style.left = pct;
+    lane.querySelector('.sp').textContent = p.finished ? ordinal(p.place) + ' · ' + p.wpm : p.wpm + ' wpm';
+  }
+  for (const lane of [...track.children]) if (!seen.has(lane.id)) lane.remove();
+}
+
+function renderGhosts() {
+  if (!room || !wordEls.length) return;
+  const box = $('#words');
+  const seen = new Set();
+  for (const p of room.players) {
+    if (p.id === myId || !p.racing || p.finished || room.state !== 'racing') continue;
+    seen.add('ghost' + p.id);
+    let g = document.getElementById('ghost' + p.id);
+    if (!g) {
+      g = el('div', 'caret ghost-caret');
+      g.id = 'ghost' + p.id;
+      g.style.setProperty('--hc', HOUSES[p.house].color);
+      g.append(el('span', '', p.name));
+      box.append(g);
+    }
+    placeCaret(g, p.w, Math.min(p.c, words[p.w] ? words[p.w].length : 0));
+  }
+  for (const g of [...box.querySelectorAll('.ghost-caret')]) if (!seen.has(g.id)) g.remove();
+}
+
+function renderInfo() {
+  const info = $('#raceInfo');
+  if (!iAmRacing) info.textContent = 'A duel is under way — you are spectating and will join the next one.';
+  else if (done) {
+    const me = room.players.find((p) => p.id === myId);
+    info.textContent = (me && me.place ? 'You finished ' + ordinal(me.place) + '! ' : '') + 'Waiting for the other wizards…';
+  } else info.textContent = room.state === 'racing' ? 'Type the incantation. Space moves to the next word.' : 'Wands at the ready…';
+}
+
+function ordinal(n) {
+  return n + (['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10] || 'th');
+}
+
+// countdown + live stats
+setInterval(() => {
+  if (!$('#race').classList.contains('on') || !words.length) return;
+  const now = performance.now();
+  const rem = startT - now;
+  const ov = $('#overlay'), cnt = $('#count');
+  if (rem > 0) {
+    const label = rem > 3000 ? 'Ready' : String(Math.ceil(rem / 1000));
+    if (label !== lastCount) {
+      lastCount = label;
+      cnt.textContent = label;
+      cnt.classList.remove('pop'); void cnt.offsetWidth; cnt.classList.add('pop');
+    }
+    ov.classList.add('on');
+    return;
+  }
+  ov.classList.remove('on');
+  if (!iAmRacing) { $('#sTime').textContent = Math.floor(-rem / 1000); return; }
+  if (done) return;
+  const s = myStats();
+  $('#sWpm').textContent = s.wpm;
+  $('#sAcc').textContent = s.acc;
+  $('#sTime').textContent = Math.floor(-rem / 1000);
+}, 100);
+
+window.addEventListener('resize', () => {
+  if (!wordEls.length || !$('#race').classList.contains('on')) return;
+  if (iAmRacing && !done) placeCaret($('#caret'), wi, typed[wi].length);
+  renderGhosts();
+});
+
+/* ---------- results ---------- */
+function renderResults(isHost) {
+  show('results');
+  const racers = room.players.filter((p) => p.racing)
+    .sort((a, b) => (a.place || 99) - (b.place || 99) || b.prog - a.prog);
+  const win = racers.find((p) => p.place === 1);
+  $('#winner').textContent = win
+    ? '🏆 ' + win.name + ' of ' + HOUSES[win.house].name + ' wins the duel!'
+    : 'The duel ends with no victor';
+  const tb = $('#resultRows');
+  tb.replaceChildren();
+  racers.forEach((p) => {
+    const tr = el('tr', (p.id === myId ? 'me ' : '') + (p.place === 1 ? 'first' : ''));
+    const nm = el('td', '', HOUSES[p.house].icon + ' ' + p.name + (p.id === myId ? ' (you)' : ''));
+    nm.style.color = HOUSES[p.house].color;
+    tr.append(
+      el('td', 'n', p.place ? ordinal(p.place) : 'DNF ' + Math.round(p.prog * 100) + '%'),
+      nm,
+      el('td', 'n', p.wpm),
+      el('td', 'n', p.acc + '%'),
+    );
+    tb.append(tr);
+  });
+  $('#again').style.display = isHost ? '' : 'none';
+  $('#waitAgain').style.display = isHost ? 'none' : '';
+}
+</script>
+</body>
+</html>
