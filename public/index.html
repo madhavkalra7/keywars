@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Keywars — The Wizarding Typing Duel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -195,7 +196,18 @@
     font: 500 .62rem 'JetBrains Mono', monospace; padding: 1px 5px; border-radius: 4px 4px 4px 0;
     background: var(--hc); color: #10101c;
   }
-  .overlay {
+  #typer {
+    position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2;
+    opacity: 0; border: 0; padding: 0; font-size: 16px; cursor: text;
+    color: transparent; caret-color: transparent; background: transparent;
+  }
+  .focus-hint {
+    position: absolute; inset: 0; z-index: 1; display: none; align-items: center; justify-content: center;
+    font-family: 'Cinzel', serif; letter-spacing: .08em; color: var(--gold-soft); pointer-events: none; text-align: center; padding: 10px;
+  }
+  .words-wrap.unfocused #words { filter: blur(4px); opacity: .6; }
+  .words-wrap.unfocused .focus-hint { display: flex; }
+  .overlay { z-index: 3;
     position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
     border-radius: 10px; background: rgba(9, 11, 24, .72); text-align: center;
     font-family: 'Cinzel', serif; color: var(--gold-soft);
@@ -300,6 +312,8 @@
       <div class="track" id="track"></div>
       <div class="words-wrap">
         <div id="words"></div>
+        <div class="focus-hint">✦ Click or tap here to keep casting ✦</div>
+        <input id="typer" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Type the words here">
         <div class="overlay" id="overlay"><div id="count"></div></div>
       </div>
       <div class="raceinfo hint" id="raceInfo"></div>
@@ -340,7 +354,8 @@ const el = (tag, cls, text) => {
 
 let ws = null, myId = null, room = null;
 let token = null, me = null, retries = 0, finalStats = null;
-let house = localStorage.getItem('kw_house') || 'ember';
+let house = localStorage.getItem('kw_house');
+if (!HOUSES[house]) house = 'ember';
 let wordCount = 30;
 
 // race state
@@ -441,7 +456,8 @@ function handle(m) {
     setupRace(m);
   } else if (m.t === 'error') {
     const s = ws; ws = null; s.close();
-    goHome(m.msg);
+    // a rejoin that fails means the server that held this chamber went away
+    goHome(retries > 0 ? 'The chamber vanished when the server restarted. Open a new one.' : m.msg);
   }
 }
 
@@ -462,6 +478,7 @@ function render() {
     $('#hostControls').style.display = isHost ? '' : 'none';
     $('#waitHost').style.display = isHost ? 'none' : '';
   } else if (room.state === 'finished') {
+    typer.blur();
     renderResults(isHost);
   } else {
     show('race');
@@ -510,7 +527,9 @@ function setupRace(m) {
   $('#sAcc').textContent = '100';
   $('#sTime').textContent = '0';
   show('race');
-  if (document.activeElement) document.activeElement.blur();
+  syncTyper();
+  if (iAmRacing) typer.focus({ preventScroll: true });
+  else typer.blur();
   placeCaret(caret, 0, 0);
   if (room) render();
 }
@@ -576,40 +595,74 @@ function finish() {
   $('#caret').style.display = 'none';
 }
 
-document.addEventListener('keydown', (e) => {
-  if (!$('#race').classList.contains('on') || !iAmRacing || done) return;
-  if (performance.now() < startT || !room || room.state === 'finished') return;
-  if (e.metaKey || e.altKey || (e.ctrlKey && e.key !== 'Backspace')) return;
-  const last = words.length - 1;
-  const prev = wi;
+/* Typing goes through a hidden input so that phone keyboards, IMEs and autocorrect work.
+   The input holds '#' + the current word; every change is diffed into keystrokes. */
+const typer = $('#typer');
+let typerPrev = '#', composing = false;
 
-  if (e.key === ' ') {
-    e.preventDefault();
+function canType() {
+  return $('#race').classList.contains('on') && iAmRacing && !done && room && room.state !== 'finished' && performance.now() >= startT;
+}
+
+function syncTyper() {
+  if (composing) return;
+  typerPrev = '#' + (wi < words.length ? typed[wi] : '');
+  typer.value = typerPrev;
+}
+
+function typeChar(ch) {
+  if (done) return;
+  const last = words.length - 1;
+  if (ch === ' ') {
     if (!typed[wi].length) return;
     tot++;
     if (typed[wi] === words[wi]) cor++;
-    if (wi === last) { wi++; paintWord(last); wi = last; finish(); return; }
-    wi++;
-  } else if (e.key === 'Backspace') {
-    e.preventDefault();
-    if (typed[wi].length) {
-      typed[wi] = e.ctrlKey ? '' : typed[wi].slice(0, -1);
-    } else if (wi > 0 && typed[wi - 1] !== words[wi - 1]) {
-      wi--;
-    }
-  } else if (e.key.length === 1) {
-    e.preventDefault();
-    if (typed[wi].length >= words[wi].length + 8) return;
-    tot++;
-    if (e.key === words[wi][typed[wi].length]) cor++;
-    typed[wi] += e.key;
-    if (wi === last && typed[wi] === words[wi]) { paintWord(wi); finish(); return; }
-  } else {
+    if (wi === last) finish();
+    else wi++;
     return;
   }
+  if (typed[wi].length >= words[wi].length + 8) return;
+  tot++;
+  if (ch === words[wi][typed[wi].length]) cor++;
+  typed[wi] += ch;
+  if (wi === last && typed[wi] === words[wi]) finish();
+}
 
-  paintWord(prev);
-  if (wi !== prev) paintWord(wi);
+function backspace(wholeWord) {
+  if (done) return;
+  if (typed[wi].length) typed[wi] = wholeWord ? '' : typed[wi].slice(0, -1);
+  else if (wi > 0 && typed[wi - 1] !== words[wi - 1]) wi--;
+}
+
+typer.addEventListener('compositionstart', () => { composing = true; });
+typer.addEventListener('compositionend', () => { composing = false; setTimeout(syncTyper); });
+typer.addEventListener('keydown', (e) => {
+  if (/^(Arrow|Home|End|PageUp|PageDown|Enter)/.test(e.key) || ((e.ctrlKey || e.metaKey) && /^[az]$/i.test(e.key))) e.preventDefault();
+});
+typer.addEventListener('input', (e) => {
+  const cur = typer.value;
+  if (!canType() || /^insertFrom|^history/.test(e.inputType || '')) {
+    if (composing) typerPrev = cur; else syncTyper();
+    return;
+  }
+  const before = wi;
+  if (e.inputType === 'deleteWordBackward') {
+    backspace(true);
+  } else {
+    let k = 0;
+    while (k < cur.length && k < typerPrev.length && cur[k] === typerPrev[k]) k++;
+    for (let i = typerPrev.length - k; i > 0; i--) backspace(false);
+    for (const ch of cur.slice(k)) typeChar(/s/.test(ch) ? ' ' : ch);
+  }
+  typerPrev = cur;
+  afterTyping(before);
+  syncTyper();
+});
+
+function afterTyping(before) {
+  const hi = Math.min(words.length - 1, Math.max(before, wi));
+  for (let i = Math.max(0, Math.min(before, wi) - 1); i <= hi; i++) paintWord(i);
+  if (done) return;
   const caret = $('#caret');
   caret.classList.add('typing');
   clearTimeout(caret.idle);
@@ -617,6 +670,15 @@ document.addEventListener('keydown', (e) => {
   placeCaret(caret, wi, typed[wi].length);
   renderGhosts();
   sendProgress();
+}
+
+// typing anywhere on the page during a duel goes into the duel
+document.addEventListener('keydown', (e) => {
+  if (!$('#race').classList.contains('on') || !iAmRacing || done) return;
+  if (e.key === 'Tab') { e.preventDefault(); return; }
+  if (document.activeElement !== typer && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace')) {
+    typer.focus({ preventScroll: true });
+  }
 });
 
 function renderTrack() {
@@ -690,9 +752,11 @@ setInterval(() => {
       cnt.classList.remove('pop'); void cnt.offsetWidth; cnt.classList.add('pop');
     }
     ov.classList.add('on');
+    $('.words-wrap').classList.remove('unfocused');
     return;
   }
   ov.classList.remove('on');
+  $('.words-wrap').classList.toggle('unfocused', !!(iAmRacing && !done && room && room.state === 'racing' && document.activeElement !== typer));
   if (!iAmRacing) { $('#sTime').textContent = Math.floor(-rem / 1000); return; }
   if (done) return;
   const s = myStats();

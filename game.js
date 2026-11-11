@@ -141,7 +141,8 @@ const handlers = {
       token: crypto.randomBytes(12).toString('hex'),
       dropTimer: null,
       w: 0, c: 0, prog: 0, wpm: 0, acc: 100,
-      finished: false, place: 0, racing: false,
+      finished: false, place: 0,
+      racing: room.state === 'countdown', // the race hasn't begun yet, so they can still take part
     };
     room.players.set(player.id, player);
     if (!room.hostId) room.hostId = player.id;
@@ -150,7 +151,7 @@ const handlers = {
     send(ws, { t: 'joined', id: player.id, code: room.code, token: player.token });
     broadcast(room);
     if (room.state === 'countdown' || room.state === 'racing') {
-      send(ws, { t: 'start', words: room.words, in: room.startAt - Date.now(), racing: false });
+      send(ws, { t: 'start', words: room.words, in: room.startAt - Date.now(), racing: player.racing });
     }
   },
 
@@ -172,7 +173,7 @@ const handlers = {
       broadcast(room);
       checkEnd(room);
     }, COUNTDOWN_MS);
-    room.endTimer = setTimeout(() => endRace(room), COUNTDOWN_MS + 30000 + room.wordCount * 3000);
+    room.endTimer = setTimeout(() => endRace(room), COUNTDOWN_MS + 60000 + room.wordCount * 4000);
   },
 
   progress(ws, m) {
@@ -212,7 +213,7 @@ const handlers = {
 
 function attach(server) {
   const wss = new WebSocketServer({ server, maxPayload: 4096 });
-    wss.on('error', () => {}); // listen errors surface on the http server
+  wss.on('error', () => {}); // listen errors surface on the http server
 
   wss.on('connection', (ws) => {
     ws.on('message', (raw) => {
