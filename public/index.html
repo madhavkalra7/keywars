@@ -416,8 +416,9 @@ const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
 
 $('#create').onclick = () => enter(null);
 $('#join').onclick = () => enter($('#code').value.trim().toUpperCase());
-$('#code').onkeydown = (e) => e.key === 'Enter' && $('#join').click();
-$('#name').onkeydown = (e) => e.key === 'Enter' && ($('#code').value ? $('#join') : $('#create')).click();
+// (addEventListener, not onkeydown: an on* handler that returns false cancels the keystroke)
+$('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
+$('#name').addEventListener('keydown', (e) => { if (e.key === 'Enter') ($('#code').value ? $('#join') : $('#create')).click(); });
 
 /* ---------- messages ---------- */
 function handle(m) {
@@ -529,9 +530,9 @@ function placeCaret(caret, w, c) {
   if (!d) { caret.style.display = 'none'; return; }
   const letters = d.children;
   const at = letters[Math.min(c, letters.length - 1)];
-  const x = d.offsetLeft + at.offsetLeft + (c >= letters.length ? at.offsetWidth : 0);
+  const x = at.offsetLeft + (c >= letters.length ? at.offsetWidth : 0);
   caret.style.left = x - 1 + 'px';
-  caret.style.top = d.offsetTop + at.offsetTop + at.offsetHeight * 0.14 + 'px';
+  caret.style.top = at.offsetTop + at.offsetHeight * 0.14 + 'px';
   caret.style.height = at.offsetHeight * 0.72 + 'px';
 }
 
