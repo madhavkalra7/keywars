@@ -137,6 +137,9 @@
   .code {
     font-family: 'Cinzel', serif; font-weight: 900; font-size: 2rem; letter-spacing: .3em; color: var(--gold-soft);
   }
+  .topbar { display: flex; justify-content: flex-end; margin: -8px -8px 4px 0; }
+  button.small { padding: 6px 12px; font-size: .75rem; }
+  .solo-row button { flex: 1; }
   .players { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; }
   .players li {
     display: flex; align-items: center; gap: 10px; padding: 10px 14px;
@@ -274,6 +277,12 @@
         <input id="code" type="text" maxlength="4" placeholder="CODE" autocomplete="off">
         <button id="join" class="ghost">Enter Chamber</button>
       </div>
+      <div class="or">— or practise alone —</div>
+      <div class="row solo-row" id="soloLens">
+        <button class="ghost" data-n="15">Solo · 15</button>
+        <button class="ghost" data-n="30">Solo · 30</button>
+        <button class="ghost" data-n="50">Solo · 50</button>
+      </div>
     </div>
   </section>
 
@@ -285,7 +294,10 @@
           <h2 style="margin:0">CHAMBER CODE</h2>
           <div class="code" id="roomCode"></div>
         </div>
-        <button id="copy" class="ghost">Copy Invite Link</button>
+        <div class="row">
+          <button id="copy" class="ghost">Copy Invite Link</button>
+          <button class="ghost leave">Leave</button>
+        </div>
       </div>
       <ul class="players" id="lobbyPlayers"></ul>
       <div id="hostControls">
@@ -304,6 +316,7 @@
   <!-- RACE -->
   <section id="race" class="view">
     <div class="panel">
+      <div class="topbar"><button class="ghost small leave">✕ Leave</button></div>
       <div class="stats">
         <div class="stat"><b id="sWpm">0</b><small>WPM</small></div>
         <div class="stat"><b id="sAcc">100</b><small>ACCURACY %</small></div>
@@ -330,6 +343,7 @@
       </table>
       <div class="center">
         <button id="again">↻ Duel Again</button>
+        <button class="ghost leave">⌂ Home</button>
         <p id="waitAgain" class="hint">Waiting for the host to start another duel…</p>
       </div>
     </div>
@@ -337,6 +351,7 @@
 </main>
 <div id="toast"></div>
 
+<script src="/words.js"></script>
 <script>
 const HOUSES = {
   ember: { name: 'Emberclaw',   icon: '🔥', color: 'var(--ember)' },
@@ -357,6 +372,7 @@ let token = null, me = null, retries = 0, finalStats = null;
 let house = localStorage.getItem('kw_house');
 if (!HOUSES[house]) house = 'ember';
 let wordCount = 30;
+let solo = false, soloLen = 30, soloTimer = null, soloMsg = '';
 
 // race state
 let words = [], typed = [], wi = 0, startT = 0, endT = 0;
@@ -397,6 +413,7 @@ function enter(code) {
   if (code !== null && code.length !== 4) { toast('Chamber codes are 4 letters.'); $('#code').focus(); return; }
   localStorage.setItem('kw_name', name);
   me = { name, house };
+  solo = false; clearTimeout(soloTimer);
   room = null; myId = null; token = null; retries = 0;
   if (ws) { const old = ws; ws = null; old.close(); }
   openSocket({ t: 'join', name, house, code: code || undefined });
@@ -412,7 +429,7 @@ function openSocket(joinMsg) {
   const sock = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/ws');
   ws = sock;
   sock.onopen = () => sock.send(JSON.stringify(joinMsg));
-  sock.onmessage = (e) => handle(JSON.parse(e.data));
+  sock.onmessage = (e) => { if (ws === sock) handle(JSON.parse(e.data)); };
   sock.onclose = () => {
     if (ws !== sock) return;
     ws = null;
@@ -430,6 +447,66 @@ setInterval(() => send({ t: 'ping' }), 25000); // keep idle connections alive
 const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
 
 $('#create').onclick = () => enter(null);
+$('#soloLens').onclick = (e) => { const b = e.target.closest('button'); if (b) startSolo(+b.dataset.n); };
+document.querySelectorAll('.leave').forEach((b) => (b.onclick = leave));
+
+function leave() {
+  if (ws) {
+    const s = ws;
+    ws = null;
+    if (s.readyState === 1) s.send(JSON.stringify({ t: 'leave' }));
+    s.close();
+  }
+  solo = false;
+  clearTimeout(soloTimer);
+  words = []; wordEls = [];
+  typer.blur();
+  history.replaceState(null, '', location.pathname);
+  goHome();
+}
+
+/* ---------- solo: runs entirely in the browser ---------- */
+function startSolo(n) {
+  const name = $('#name').value.trim();
+  if (name) localStorage.setItem('kw_name', name);
+  if (ws) leave();
+  solo = true; soloLen = n; soloMsg = '';
+  myId = 0; token = null;
+  const list = [];
+  while (list.length < n) {
+    const w = KW_WORDS[Math.floor(Math.random() * KW_WORDS.length)];
+    if (w !== list[list.length - 1]) list.push(w);
+  }
+  room = {
+    code: '', state: 'countdown', hostId: 0, wordCount: n,
+    players: [{ id: 0, name: name || 'Wizard', house, w: 0, c: 0, prog: 0, wpm: 0, acc: 100, finished: false, place: 0, racing: true }],
+  };
+  clearTimeout(soloTimer);
+  setupRace({ words: list, in: 3500, racing: true });
+  soloTimer = setTimeout(() => {
+    if (solo && room.state === 'countdown') { room.state = 'racing'; render(); }
+  }, 3500);
+}
+
+function soloSync() {
+  const p = room.players[0];
+  p.w = Math.min(wi, words.length - 1);
+  p.c = typed[p.w].length;
+  const len = words[p.w].length;
+  p.prog = (p.w + Math.min(p.c, len) / len) / words.length;
+  Object.assign(p, myStats());
+  renderTrack();
+}
+
+function soloFinish(s) {
+  const key = 'kw_pb_' + soloLen;
+  const pb = +localStorage.getItem(key) || 0;
+  soloMsg = s.wpm > pb ? '✦ New personal best: ' + s.wpm + ' WPM!' : 'Personal best for ' + soloLen + ' words: ' + pb + ' WPM';
+  if (s.wpm > pb) localStorage.setItem(key, s.wpm);
+  Object.assign(room.players[0], { finished: true, place: 1, prog: 1, wpm: s.wpm, acc: s.acc });
+  room.state = 'finished';
+  render();
+}
 $('#join').onclick = () => enter($('#code').value.trim().toUpperCase());
 // (addEventListener, not onkeydown: an on* handler that returns false cancels the keystroke)
 $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
@@ -496,7 +573,7 @@ $('#lengths').onclick = (e) => {
   document.querySelectorAll('#lengths button').forEach((x) => x.classList.toggle('sel', x === b));
 };
 $('#start').onclick = () => send({ t: 'start', wordCount });
-$('#again').onclick = () => send({ t: 'again' });
+$('#again').onclick = () => (solo ? startSolo(soloLen) : send({ t: 'again' }));
 $('#copy').onclick = async () => {
   const link = location.origin + '/?room=' + room.code;
   try { await navigator.clipboard.writeText(link); toast('Invite link copied!', true); }
@@ -593,6 +670,7 @@ function finish() {
   $('#sWpm').textContent = s.wpm;
   $('#sAcc').textContent = s.acc;
   $('#caret').style.display = 'none';
+  if (solo) soloFinish(s);
 }
 
 /* Typing goes through a hidden input so that phone keyboards, IMEs and autocorrect work.
@@ -652,7 +730,7 @@ typer.addEventListener('input', (e) => {
     let k = 0;
     while (k < cur.length && k < typerPrev.length && cur[k] === typerPrev[k]) k++;
     for (let i = typerPrev.length - k; i > 0; i--) backspace(false);
-    for (const ch of cur.slice(k)) typeChar(/s/.test(ch) ? ' ' : ch);
+    for (const ch of cur.slice(k)) typeChar(/\s/.test(ch) ? ' ' : ch);
   }
   typerPrev = cur;
   afterTyping(before);
@@ -669,11 +747,12 @@ function afterTyping(before) {
   caret.idle = setTimeout(() => caret.classList.remove('typing'), 600);
   placeCaret(caret, wi, typed[wi].length);
   renderGhosts();
-  sendProgress();
+  if (solo) soloSync(); else sendProgress();
 }
 
 // typing anywhere on the page during a duel goes into the duel
 document.addEventListener('keydown', (e) => {
+  if (solo && e.key === 'Escape' && $('#race').classList.contains('on')) { startSolo(soloLen); return; }
   if (!$('#race').classList.contains('on') || !iAmRacing || done) return;
   if (e.key === 'Tab') { e.preventDefault(); return; }
   if (document.activeElement !== typer && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace')) {
@@ -731,7 +810,9 @@ function renderInfo() {
   else if (done) {
     const me = room.players.find((p) => p.id === myId);
     info.textContent = (me && me.place ? 'You finished ' + ordinal(me.place) + '! ' : '') + 'Waiting for the other wizards…';
-  } else info.textContent = room.state === 'racing' ? 'Type the incantation. Space moves to the next word.' : 'Wands at the ready…';
+  } else info.textContent = room.state === 'racing'
+    ? 'Type the incantation. Space moves to the next word.' + (solo ? ' Esc starts over.' : '')
+    : 'Wands at the ready…';
 }
 
 function ordinal(n) {
@@ -796,6 +877,8 @@ function renderResults(isHost) {
   });
   $('#again').style.display = isHost ? '' : 'none';
   $('#waitAgain').style.display = isHost ? 'none' : '';
+  $('#again').textContent = solo ? '↻ Try Again' : '↻ Duel Again';
+  if (solo) $('#winner').textContent = soloMsg;
 }
 </script>
 </body>

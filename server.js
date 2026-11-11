@@ -7,15 +7,21 @@ const { attach } = require('./game');
 
 const PORT = process.env.PORT || 3000;
 
+const FILES = {
+  '/': ['index.html', 'text/html; charset=utf-8'],
+  '/index.html': ['index.html', 'text/html; charset=utf-8'],
+  '/words.js': ['words.js', 'text/javascript; charset=utf-8'],
+};
+
 const server = http.createServer((req, res) => {
-  const url = req.url.split('?')[0];
-  if (url === '/' || url === '/index.html') {
-    fs.readFile(path.join(__dirname, 'public', 'index.html'), (err, data) => {
+  const file = FILES[req.url.split('?')[0]];
+  if (file) {
+    fs.readFile(path.join(__dirname, 'public', file[0]), (err, data) => {
       if (err) {
         res.writeHead(500);
-        return res.end('Missing public/index.html');
+        return res.end('Missing public/' + file[0]);
       }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.writeHead(200, { 'Content-Type': file[1], 'Cache-Control': 'no-cache' });
       res.end(data);
     });
   } else {
